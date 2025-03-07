@@ -41,7 +41,6 @@ export function ProjectForm(props: Props) {
     const modal = document.getElementById("new-project-modal") as HTMLDialogElement;
     if (modal) modal.close();
   };
-  console.log("dentro")
   return (
     <dialog id="new-project-modal" open={props.isModalOpen}>
       <form onSubmit={onFormSubmit} id="new-project-form">

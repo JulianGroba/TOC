@@ -18,7 +18,6 @@ export function ProjectsPage(props: Props) {
 
   const [projects, setProjects] = React.useState<Project[]>(props.projectsManager.list)
   props.projectsManager.OnProjectCreated = () => {setProjects([...props.projectsManager.list])}
-  const dialogRef = React.useRef<HTMLDialogElement>(null);
 
   const getFirestoreProjects = async () => {
     const firebaseProjects = await Firestore.getDocs(projectsCollection)

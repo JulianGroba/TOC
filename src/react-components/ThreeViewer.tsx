@@ -3,8 +3,16 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
+import * as OBC from '@thatopen/components'
+import * as OBCF from '@thatopen/components-front'
+import { TodoCreator } from "../bim-components/TodoCreator";
 
-export function ThreeViewer() {
+interface Props{
+  components: OBC.Components
+}
+
+
+export function ThreeViewer(props: Props) {
   let scene: THREE.Scene | null
   let mesh: THREE.Object3D | null
   let renderer: THREE.WebGLRenderer | null
@@ -16,7 +24,7 @@ export function ThreeViewer() {
   let ambientLight: THREE.AmbientLight | null
   let mtlLoader: MTLLoader | null
   let objLoader: OBJLoader | null
-
+  const components : OBC.Components = props.components
   const setViewer = () => {
     scene = new THREE.Scene()
 
@@ -27,7 +35,7 @@ export function ThreeViewer() {
   
     renderer = new THREE.WebGLRenderer({alpha: true, antialias: true})
     viewerContainer.append(renderer.domElement)
-  
+    
     function resizeViewer() {
       const containerDimensions = viewerContainer.getBoundingClientRect()
       if(!renderer) return

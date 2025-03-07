@@ -5,11 +5,33 @@ import { Sidebar } from "./react-components/Sidebar"
 import { ProjectsPage } from "./react-components/ProjectsPage"
 import { ProjectDetailsPage } from "./react-components/ProjectDetailsPage"
 import { ProjectsManager } from "./classes/ProjectsManager"
+import * as BUI from "@thatopen/ui"
+
+BUI.Manager.init()
+
+declare global{
+  namespace JSX{
+    interface IntrinsicElements{
+      "bim-grid":any;
+      "bim-label": any;
+      "bim-button": any;
+      "bim-text-input": any;
+      "bim-viewport": any;
+      "bim-panel": any;
+      //"bim-panel-section": any;
+      "bim-table": any;
+      "bim-dropdown": any;
+      "bim-option": any;
+      
+    }
+  }
+}
 
 const projectsManager = new ProjectsManager()
 
 const rootElement = document.getElementById("app") as HTMLDivElement
 const appRoot = ReactDOM.createRoot(rootElement)
+
 appRoot.render(
   <>
     <Router.BrowserRouter>

@@ -9,6 +9,7 @@ export class ProjectsManager {
     const filteredProjects = this.list.filter((project) => {
       return project.name.includes(value)
     })
+    
     return filteredProjects
   }
 
