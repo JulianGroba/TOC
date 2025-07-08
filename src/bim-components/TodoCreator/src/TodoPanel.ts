@@ -69,7 +69,7 @@ export function TodoPanel ({ todoCreator }: Props){
           </div>`;
       },
     };
-    todoTable.hiddenColumns = ["Guids", "Camera", "Número"];
+    todoTable.hiddenColumns = ["Guids", "Camera", "Id"];
   };
   //#endregion
   //#region Eventos
