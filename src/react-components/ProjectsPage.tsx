@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as Router from "react-router-dom";
 import * as Firestore from "firebase/firestore";
-import { IProject, Project, ProjectStatus, UserRole } from "../classes/Project";
+import { IProject, Project } from "../classes/Project";
 import { ProjectCard } from "./ProjectCard";
 import { SearchBox } from "./SearchBox";
 import { ProjectsManager } from "../classes/ProjectsManager";
@@ -9,70 +9,81 @@ import { getCollection } from "../firebase";
 import { ProjectForm } from "./ProjectForm";
 
 interface Props {
-  projectsManager: ProjectsManager
+  projectsManager: ProjectsManager;
 }
 
-const projectsCollection = getCollection<IProject>("projects")
+const projectsCollection = getCollection<IProject>("projects");
 
-export function ProjectsPage(props: Props) {
+export function ProjectsPage({ projectsManager }: Props) {
+  const [projects, setProjects] = React.useState<Project[]>(projectsManager.list);
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
 
-  const [projects, setProjects] = React.useState<Project[]>(props.projectsManager.list)
-  props.projectsManager.OnProjectCreated = () => {setProjects([...props.projectsManager.list])}
-
-  const getFirestoreProjects = async () => {
-    const firebaseProjects = await Firestore.getDocs(projectsCollection)
-    for (const doc of firebaseProjects.docs) {
-      const data = doc.data()
-      const project: IProject = {
-        ...data,
-        finishDate: (data.finishDate as unknown as Firestore.Timestamp).toDate()
-      }
-      try {
-        props.projectsManager.newProject(project, doc.id)
-      } catch (error) {
-        
-      }
-    }
-  }
-
+  // Asignar callbacks solo una vez
   React.useEffect(() => {
-    getFirestoreProjects()
-  }, [])
+    const onCreated = () => setProjects([...projectsManager.list]);
+    const onDeleted = () => setProjects([...projectsManager.list]);
 
-  const projectCards = projects.map((project) => {
-    return (
-      <Router.Link to={`/project/${project.id}`} key={project.id} >
-        <ProjectCard project={project} />
-      </Router.Link>
-    )
-  })
+    projectsManager.OnProjectCreated = onCreated;
+    projectsManager.OnProjectDeleted = onDeleted;
 
+    return () => {
+      // limpiar para evitar fugas
+      projectsManager.OnProjectCreated = undefined!;
+      projectsManager.OnProjectDeleted = undefined!;
+    };
+  }, [projectsManager]);
+
+  // Cargar datos de Firestore solo una vez
   React.useEffect(() => {
-    console.log("Projects state updated", projects)
-  }, [projects])
+    let mounted = true;
+    const load = async () => {
+      const firebaseProjects = await Firestore.getDocs(projectsCollection);
+      if (!mounted) return;
+      firebaseProjects.docs.forEach((doc) => {
+        const data = doc.data();
+        const project = {
+          ...data,
+          finishDate: (data.finishDate as any as Firestore.Timestamp).toDate(),
+        } as IProject;
+        try {
+          projectsManager.newProject(project, doc.id);
+        } catch {}
+      });
+    };
+    load();
+    return () => { mounted = false; };  
+  }, [projectsManager]);
 
-  const openModal = () => {
-    setIsModalOpen(true);
+  const navigate = Router.useNavigate();
+
+  const handleDelete = async (id: string) => {
+    await projectsManager.deleteProject(id);
+    navigate("/");
   };
+
   const onExportProject = () => {
-    props.projectsManager.exportToJSON()
-  }
+    projectsManager.exportToJSON();
+  };
 
   const onImportProject = () => {
-    props.projectsManager.importFromJSON()
-  }
+    projectsManager.importFromJSON();
+  };
 
   const onProjectSearch = (value: string) => {
-    setProjects(props.projectsManager.filterProjects(value))
-  }
+    setProjects(projectsManager.filterProjects(value));
+  };
 
-  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const projectCards = projects.map((project) => (
+    <Router.Link to={`/project/${project.id}`} key={project.id}>
+      <ProjectCard project={project} />
+    </Router.Link>
+  ));
 
   return (
     <div className="page" id="projects-page" style={{ display: "flex" }}>
       <header>
         <h2>Projects</h2>
-        <SearchBox onChange={(value) => onProjectSearch(value)}/>
+        <SearchBox onChange={onProjectSearch} />
         <div style={{ display: "flex", alignItems: "center", columnGap: 15 }}>
           <span
             id="import-projects-btn"
@@ -88,22 +99,26 @@ export function ProjectsPage(props: Props) {
           >
             file_download
           </span>
-          <button onClick={openModal} id="new-project-btn">
+          <button onClick={() => setIsModalOpen(true)} id="new-project-btn">
             <span className="material-icons-round">add</span>New Project
           </button>
         </div>
       </header>
-      {
-        !isModalOpen && (
-          projects.length > 0 ? <div id="projects-list">{ projectCards }</div> : <p>There is no projects to display!</p>
+
+      {!isModalOpen && (
+        projects.length > 0 ? (
+          <div id="projects-list">{projectCards}</div>
+        ) : (
+          <p>There is no projects to display!</p>
         )
-      }
+      )}
+
       <ProjectForm
-        projectsManager={props.projectsManager}
+        projectsManager={projectsManager}
         projectsCollection={projectsCollection}
         isModalOpen={isModalOpen}
         setIsModalOpen={setIsModalOpen}
       />
     </div>
-  )
+  );
 }

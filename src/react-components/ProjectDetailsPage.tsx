@@ -13,7 +13,8 @@ interface Props {
 
 export function ProjectDetailsPage(props: Props) {
   
-  const components: OBC.Components = new OBC.Components()
+  //const components: OBC.Components = new OBC.Components()
+  const [components] = React.useState(() => new OBC.Components());
   
   const routeParams = Router.useParams<{id: string}>()
   if (!routeParams.id) {return (<p>Project ID is needed to see this page</p>)}
@@ -122,8 +123,8 @@ export function ProjectDetailsPage(props: Props) {
           </div>
         <TodoCard projectId={project.id} components={components}/>
         </div>
+        <ThreeViewer components={components}/>
       </div>
-      <ThreeViewer components={components}/>
     </div>
   );
 

@@ -4,7 +4,8 @@ export interface TodoInput {
     name: string
     task: string
     priority: Priority
-    projectId: string
+    projectId?: string
+    date?: Date
 }
 
 export interface TodoData {
@@ -12,6 +13,9 @@ export interface TodoData {
     task: string
     priority: Priority
     id: string
-    projectId: string
-    date: Date
+    projectId?: string
+    date?: Date
+    ifcGuids: string
+    camera: string
+    number?: number
 }

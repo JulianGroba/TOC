@@ -1,150 +1,224 @@
-import * as React from "react";
-import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
-import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
+import * as React from 'react'
 import * as OBC from '@thatopen/components'
 import * as OBCF from '@thatopen/components-front'
+import * as BUI from '@thatopen/ui'
+import * as CUI from '@thatopen/ui-obc'
+import * as THREE from 'three'
+import {FragmentsGroup} from '@thatopen/fragments'
+import { createWorld } from "../components/functions/worlds-factory";
+
 import { TodoCreator } from "../bim-components/TodoCreator";
+import { ViewerPanel } from '../bim-components/ViewerPanel'
+import { AppManager } from '../bim-components/AppManager';
+import ViewerToolbar from '../components/Toolbars/ViewerToolbar';
+import ProcessModel from '../components/general/ProcessModel'
+import EPP from '../components/Panels/ElementPropertyPanel';
+import WP from '../components/Panels/WorldPanel'
+import TP from '../components/Panels/TreePanel'
 
 interface Props{
   components: OBC.Components
 }
-
-
-export function ThreeViewer(props: Props) {
-  let scene: THREE.Scene | null
-  let mesh: THREE.Object3D | null
-  let renderer: THREE.WebGLRenderer | null
-  let cameraControls: OrbitControls | null
-  let camera: THREE.PerspectiveCamera | null
-  let axes: THREE.AxesHelper | null
-  let grid: THREE.GridHelper | null
-  let directionalLight: THREE.DirectionalLight | null
-  let ambientLight: THREE.AmbientLight | null
-  let mtlLoader: MTLLoader | null
-  let objLoader: OBJLoader | null
+export function ThreeViewer(props: Props){
   const components : OBC.Components = props.components
-  const setViewer = () => {
-    scene = new THREE.Scene()
-
-    const viewerContainer = document.getElementById("viewer-container") as HTMLElement
+  const viewerPanelRef = React.useRef<ViewerPanel | null>(null);
   
-    camera = new THREE.PerspectiveCamera(75)
-    camera.position.z = 5
+  const [mainWorld, setMainWorld] = React.useState<OBC.World>();
+  const [compareWorld, setCompareWorld] = React.useState<OBC.World>();
+  const [viewportA, setViewportA] = React.useState<HTMLElement>();
+  const [viewportB, setViewportB] = React.useState<HTMLElement>();
+  const [showSecondWorld, setShowSecondWorld] = React.useState(false);
+  const [uiInitialized, setUIInitialized] = React.useState(false);
+  const setupUIRef = React.useRef<(() => void) | null>(null);
   
-    renderer = new THREE.WebGLRenderer({alpha: true, antialias: true})
-    viewerContainer.append(renderer.domElement)
-    
-    function resizeViewer() {
-      const containerDimensions = viewerContainer.getBoundingClientRect()
-      if(!renderer) return
-      renderer.setSize(containerDimensions.width, containerDimensions.height)
-      const aspectRatio = containerDimensions.width / containerDimensions.height
-      if(!camera) return
-      camera.aspect = aspectRatio
-      camera.updateProjectionMatrix()
-    }
+  let fragmentModel: FragmentsGroup | undefined
+  const appManager = components.get(AppManager);
   
-    window.addEventListener("resize", resizeViewer)
-  
-    resizeViewer()
-  
-    directionalLight = new THREE.DirectionalLight()
-    ambientLight = new THREE.AmbientLight()
-    ambientLight.intensity = 0.4
-  
-    scene.add(directionalLight, ambientLight)
-  
-    cameraControls = new OrbitControls(camera, viewerContainer)
-  
-    function renderScene() {
-      if(!renderer || !scene || !camera) return
-      renderer.render(scene, camera)
-      requestAnimationFrame(renderScene)
-    }
-  
-    renderScene()
-  
-    axes = new THREE.AxesHelper()
-    grid = new THREE.GridHelper()
-    grid.material.transparent = true
-    grid.material.opacity = 0.4
-    grid.material.color = new THREE.Color("#808080")
-  
-    scene.add(axes, grid)
-  
-    objLoader = new OBJLoader()
-    mtlLoader = new MTLLoader()
-  
-    mtlLoader.load("../assets/Gear/Gear1.mtl", (materials) => {
-      materials.preload()
-      if(!objLoader) return
-      objLoader.setMaterials(materials)
-      objLoader.load("../assets/Gear/Gear1.obj", (me) => {
-        if(!scene) return
-        scene.add(me)
-        mesh = me
-      })
-    })
-  }
-
   React.useEffect(() => {
-    setViewer();
-    return () => {
-      mesh?.removeFromParent()
-      mesh?.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.geometry.dispose()
-          child.material.dispose()
-        }
-      })
-      mesh = null
-
-      cameraControls?.dispose()
-      cameraControls = null
-  
-      directionalLight?.dispose()
-      directionalLight?.removeFromParent()
-      directionalLight = null
-                       
-      ambientLight?.removeFromParent()
-      ambientLight?.dispose()
-      ambientLight = null
-  
-      renderer?.dispose()
-      renderer = null
-         
-      grid?.removeFromParent()
-      grid?.geometry.dispose()
-      grid?.material.dispose()
-      grid = null
-  
-      axes?.removeFromParent()
-      axes?.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.material.dispose();
-        }
-      })
-      axes?.geometry.dispose()
-      axes = null
+    components.init();
+    
+    const { world: worldA, viewport: viewportA } = createWorld(components, { name: "Main" });
+    setMainWorld(worldA);
+    setViewportA(viewportA);
+    
+    const setupWorld = (world: OBC.World) => {
+      const ifcLoader = components.get(OBC.IfcLoader);
+      ifcLoader.setup();
       
-      camera?.removeFromParent()
-      camera = null
-
-      scene?.removeFromParent()
-      scene = null
-
-      mtlLoader = null
-      objLoader = null
+      const fragmentsManager = components.get(OBC.FragmentsManager);
+      
+      fragmentsManager.onFragmentsLoaded.add(async (model) => {
+        world.scene.three.add(model);
+        if (model.hasProperties) await ProcessModel(model, components);
+        
+        const cullers = components.get(OBC.Cullers);
+        const culler = cullers.list.get(world.uuid);
+        model.items.forEach(fragment => culler?.add(fragment.mesh));
+        culler && (culler.needsUpdate = true);
+        
+        appManager.fragmentModel = model;
+        fragmentModel = model;
+      });
+  
+      const highlighter = components.get(OBCF.Highlighter);
+      highlighter.setup({
+        selectName: "selectEvent",
+        selectEnabled: true,
+        hoverName: "hoverEvent",
+        hoverEnabled: true,
+        selectionColor: new THREE.Color(0xff0000),
+        hoverColor: new THREE.Color('#6B96CF'),
+        autoHighlightOnClick: true,
+        world,
+      });
+        
+  
+      const todoCreator = components.get(TodoCreator);
+      todoCreator.world = world;
+      todoCreator.setup();
+      
+      const viewerPanel = components.get(ViewerPanel);
+      viewerPanel.world = worldA
+      viewerPanelRef.current = viewerPanel
+      appManager.viewerPanelRef = viewerPanel;
+  
+      return { fragmentsManager, highlighter };
+    };
+  
+    setupWorld(worldA);
+  
+    return () => {
+      components.dispose();
+      fragmentModel?.dispose();
     };
   }, []);
-
-  return (
-    <div
-      id="viewer-container"
-      className="dashboard-card"
-      style={{ minWidth: 0 }}
-    />
+  
+  const initializeUI = React.useCallback(() => {
+    const viewerContainer = document.getElementById('viewer-container');
+  
+    if(!viewerContainer) {
+      console.log("No hay viewerContainer")
+      return
+    }
+  
+    const floatingGrid = BUI.Component.create<BUI.Grid>(() => BUI.html`
+      <bim-grid floating style="padding: 20px" id="floating-grid"></bim-grid>
+    `);
+    appManager.floatingGrid = floatingGrid;
+  
+    const elementPropertyPanel = EPP(components);
+    const toolbar = ViewerToolbar(components);
+    const worldPanel = WP(components);
+    const treePanel = TP(components);
+  
+    
+    floatingGrid.layouts = {
+      main: {
+        template: `"empty" 1fr 
+          "toolbar" auto 
+          / 1fr`,
+        elements: { toolbar }
+      },
+      secondary: {
+        template: `"empty elementPropertyPanel" 1fr 
+          "toolbar toolbar" auto 
+          / 1fr 20rem`,
+        elements: { toolbar, elementPropertyPanel }
+      },
+      world: {
+        template: `"empty worldPanel" 1fr 
+          "toolbar toolbar" auto 
+          / 1fr 20rem`,
+        elements: { toolbar, worldPanel }
+      },
+      tree: {
+        template: `"empty treePanel" 1fr 
+          "toolbar toolbar" auto 
+          / 1fr 20rem`,
+        elements: { toolbar, treePanel }
+      },
+      clean:{
+        template: `"empty" 1fr 
+          / 1fr`,
+        elements: { }
+      }
+    };
+  
+    floatingGrid.layout = 'main';
+    /*
+    const handleButtonClick = () => {
+      if (!floatingGrid) return
+      if (floatingGrid.layout !== "clean") {
+        floatingGrid.layout = "clean"
+      } else {
+        floatingGrid.layout = "tree"
+      }
+    }
+    const pruebaButton = BUI.Component.create<BUI.Button>(() => {
+      return BUI.html`
+        <bim-button
+          tooltip-title="IFCViewerToolbar"
+          icon="material-symbols:visibility-outline"
+          style="position: absolute; width: 45px; height:30px; top: 0; left: 0;"
+          @click=${() => {
+            console.log("Botón presionado");
+            console.log("appManager:", appManager);
+            handleButtonClick();
+          }}
+          >
+        </bim-button>
+      `}
+    )
+    */
+    setTimeout(() => {
+      viewerContainer.appendChild(floatingGrid)
+      
+      //floatingGrid.requestUpdate();
+      //viewerContainer.appendChild(pruebaButton)
+    }, 200);
+  
+    
+    setUIInitialized(true);
+  }, [components, viewportA]);
+  
+  console.log("Estado actual:", {
+    mainWorld: !!mainWorld,
+    compareWorld: !!compareWorld,
+    viewportA: !!viewportA,
+    viewportB: !!viewportB,
+    showSecondWorld
+  });
+  
+  React.useEffect(() => {
+    if (!mainWorld || !viewportA) {
+      return;
+    }
+  
+    const viewerContainer = document.getElementById("viewer-container");
+    if (viewerContainer && !viewerContainer.contains(viewportA)) {
+      viewerContainer.appendChild(viewportA)
+    }
+  }, [mainWorld, viewportA]);
+  
+  React.useEffect(() => {
+    if (mainWorld && !uiInitialized) {
+      initializeUI();
+      setupUIRef.current = initializeUI;
+    }
+  }, [mainWorld, uiInitialized, initializeUI]);
+  
+  return(
+    <div id="viewer-container" 
+      className="dashboard-card" 
+      style={{ 
+        position: 'relative',
+        width: '100%',
+        height: '95vh',
+        minWidth: 0, 
+        maxWidth: 800
+      }}>
+    </div>
   )
-}
+  }
+  
+  
